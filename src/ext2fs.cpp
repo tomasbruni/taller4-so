@@ -6,7 +6,6 @@
 #include <cstring>
 #include <iostream>
 #include <cstdlib>
-#include <stdint.h>
 
 Ext2FS::Ext2FS(HDD & disk, unsigned char pnumber) : _hdd(disk), _partition_number(pnumber)
 {
@@ -294,22 +293,17 @@ struct Ext2FSInode * Ext2FS::load_inode(unsigned int inode_number)
 	// leo todo el bloque correspondiente al inodo, no entiendo lo del puntero
 	unsigned int internal_offset = byte_offset % BLOCK_SIZE; // byte del bloque que corresponde 
 	// 
-	if (internal_offset + INODE_SIZE > BLOCK_SIZE){
-		unsigned char* block_1 = new unsigned char[BLOCK_SIZE];
-		unsigned char* block_2 = new unsigned char[BLOCK_SIZE];
-		read_block(inode_table_start + block_offset, block_1);
-		read_block(inode_table_start + block_offset + 1, block_2);
-		char* full_inode = new char[INODE_SIZE]; // no entiendo lo del puntero a char, lo del new hace malloc?
-		memcpy(full_inode, block_1 + internal_offset, BLOCK_SIZE-internal_offset);  // Copia la primera parte
-        memcpy(full_inode + (BLOCK_SIZE - internal_offset), block_2, (internal_offset + INODE_SIZE) - BLOCK_SIZE);  // Copia la segunda parte
-		return (Ext2FSInode*)full_inode; // esta parte la hice pero en los test no hay ningun caso de estos, pense q si por lo que decia sobre los directorios en el ppt
-	}
-	else{
-		unsigned char* block = new unsigned char[BLOCK_SIZE]; // unsigned char* block; antes hacía esto, está mal porque read_block no hace malloc
-		read_block(inode_table_start + block_offset, block);
-		Ext2FSInode* inode = (Ext2FSInode*)(block + internal_offset); // imagino que automáticamente toma los bytes necesarios y no toma de más
-		return inode;
-	}
+
+	unsigned char* block = new unsigned char[BLOCK_SIZE]; // unsigned char* block; antes hacía esto, está mal porque read_block no hace malloc
+	read_block(inode_table_start + block_offset, block);
+	
+    Ext2FSInode* inode = new Ext2FSInode;
+    
+    memcpy(inode, block + internal_offset, INODE_SIZE);
+    
+    delete[] block;
+    
+    return inode;	return inode;
 }
 
 unsigned int Ext2FS::get_block_address(struct Ext2FSInode * inode, unsigned int block_number)
@@ -361,6 +355,7 @@ unsigned int Ext2FS::get_block_address(struct Ext2FSInode * inode, unsigned int 
 	}
 }
 
+
 void Ext2FS::read_block(unsigned int block_address, unsigned char * buffer)
 {
 	unsigned int block_size = 1024 << _superblock->log_block_size;
@@ -371,28 +366,52 @@ void Ext2FS::read_block(unsigned int block_address, unsigned char * buffer)
 
 struct Ext2FSInode * Ext2FS::get_file_inode_from_dir_inode(struct Ext2FSInode * from, const char * filename)
 {
-	if(from == NULL)
-		from = load_inode(EXT2_RDIR_INODE_NUMBER);
-	//std::cerr << *from << std::endl;
-	assert(INODE_ISDIR(from));
-	//struct Ext2FSInode * Ext2FS::load_inode(unsigned int inode_number)
-	//unsigned int Ext2FS::get_block_address(struct Ext2FSInode * inode, unsigned int block_number)
-	//TODO: Ejercicio 3
-	//tengo q conseguir un inodo archivo a partir de un inodo directorio en base al nombre del archivo. El complicado lis
-	//supuestamente en el campo size está el tamaño del archivo que representa el inodo en bytes, tengo Q usar eso para saber cuando terminar de recorrer
-	//entonces en un inodo directorio cada entrada apunta a un bloque que tiene uno o varios DirEntry
-	// tengo q Hacer recursion sobre arboles o Q
-	unsigned int BLOCK_SIZE = 1024 << _superblock->log_block_size;
-	unsigned int dir_total_size = from->size;
-	// si estoy parado en un directorio, lo recorro, si encuentro otro directorio, llamo a get_file_inode_from_dir_inode de nuevo
-	unsigned int index = 0;
-	unsigned char* dir_entry_block = new unsigned char[BLOCK_SIZE];
-	// tengo que ver a los bloques como arrays de dir entries
-	Ext2FSDirEntry* dir_entries = (Ext2FSDirEntry*)dir_entry_block;
-	while (index < BLOCK_SIZE);
-	
-	 
+    if(from == NULL)
+        from = load_inode(EXT2_RDIR_INODE_NUMBER);
+    assert(INODE_ISDIR(from));
+
+    int block_size = 1024 << _superblock->log_block_size;
+    unsigned char *block_buf = (unsigned char *) malloc(2 * block_size);
+    unsigned char *block_sig = (unsigned char *) block_buf + block_size;
+    int i = 0;
+    int read = 0;
+    
+    while (i < from->blocks) {
+        unsigned int address = get_block_address(from, i);
+        read_block(address, block_buf);
+        
+        if (i + 1 < from->blocks) {
+            unsigned int address_2 = get_block_address(from, i+1);
+            read_block(address_2, block_sig);
+        }
+        
+        while (read < block_size) {
+            Ext2FSDirEntry *entradaActual = (Ext2FSDirEntry*) (block_buf + read);
+            
+            if (entradaActual->inode == 0 || read + entradaActual->record_length > block_size) {
+                break;
+            }
+            
+            int lenght = entradaActual->name_length;
+            char* filename2 = entradaActual->name;
+            
+            if(lenght == strlen(filename) && !strncmp(filename, filename2, lenght)){
+                int inodoActual = entradaActual->inode;
+                free(block_buf);
+                return load_inode(inodoActual);
+            }
+            
+            read += entradaActual->record_length;
+        }
+        
+        i++;
+        read = 0;
+    }
+
+    free(block_buf);
+    return NULL;
 }
+
 
 fd_t Ext2FS::get_free_fd()
 {
@@ -426,8 +445,6 @@ fd_t Ext2FS::open(const char * path, const char * mode)
 
 	// We ignore mode
 	struct Ext2FSInode * inode = inode_for_path(path);
-	assert(inode != NULL);
-	std::cerr << *inode << std::endl;
 
 	if(inode == NULL)
 		return -1;
