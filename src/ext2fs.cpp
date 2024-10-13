@@ -410,8 +410,7 @@ struct Ext2FSInode * Ext2FS::get_file_inode_from_dir_inode(struct Ext2FSInode * 
 	//pedimos memoria, el doblre de un bloque (por que?)
     unsigned char *block_buf = (unsigned char *) malloc(block_size); //bloque 1
 
-	// i quien va a ser?
-	// read quien es?
+	// i y read son contadores
     int i = 0;
     int read = 0;
     
