@@ -407,8 +407,8 @@ struct Ext2FSInode * Ext2FS::get_file_inode_from_dir_inode(struct Ext2FSInode * 
     assert(INODE_ISDIR(from));
 
     int block_size = 1024;
-	//pedimos memoria, el doblre de un bloque (por que?)
-    unsigned char *block_buf = (unsigned char *) malloc(block_size); //bloque 1
+	//pedimos memoria para el bloque
+    unsigned char *block_buf = (unsigned char *) malloc(block_size);
 
 	// i y read son contadores
     int i = 0;
