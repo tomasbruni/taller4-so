@@ -267,7 +267,7 @@ unsigned int Ext2FS::blockaddr2sector(unsigned int block)
 	const PartitionEntry & pentry = _hdd[_partition_number];
 
 	// Compute block size by shifting the value 1024
-	unsigned int block_size = 1024 << _superblock->log_block_size;
+	unsigned int block_size = 1024 << _superblock-> log_block_size;
 	unsigned int sectors_per_block = block_size / SECTOR_SIZE;
 
 	return pentry.start_lba() + block * sectors_per_block;
@@ -279,22 +279,37 @@ unsigned int Ext2FS::blockaddr2sector(unsigned int block)
 struct Ext2FSInode * Ext2FS::load_inode(unsigned int inode_number)
 {
 	//TODO: Ejercicio 1
-	// _bgd_table = new Ext2FSBlockGroupDescriptor[_block_groups];
-	unsigned int blockgroup = blockgroup_for_inode(inode_number);
-	Ext2FSBlockGroupDescriptor descriptor = _bgd_table[blockgroup]; // nose si deberia hacerlo con punteros Ext2FSBlockGroupDescriptor* descriptor = &_bgd_table[blockgroup];
-	unsigned int inode_table_start = descriptor.inode_table;		// dirección del bloque donde empieza la tabla
+	
+	// Tenemos que buscar en qué blockgroup está el inodo
+	unsigned int blockgroup_n = blockgroup_for_inode(inode_number);
+
+	// En qué indice dentro de la tabla de inodos del blockgroup está
+	Ext2FSBlockGroupDescriptor* descriptor = block_group(blockgroup_n);
+	// descriptor -> inode_table es dónde arranca la tabla de inodos. Bytes o bloques?
+	unsigned int inode_table_start = descriptor -> inode_table;		
+
+	// blockgroup_inode_index(inode): Offset dentro de la tabla
+	// de inodos, para el inodo
 	unsigned int index = blockgroup_inode_index(inode_number);
-	unsigned int INODE_SIZE = _superblock->inode_size;
-	unsigned int BLOCK_SIZE = 1024 << _superblock->log_block_size;
+
+	unsigned int INODE_SIZE = superblock() -> inode_size;
+	unsigned int BLOCK_SIZE = 1024; // por consigna
+
 	std::cout << "BLOCK_SIZE: " << BLOCK_SIZE << std::endl;
 	std::cout << "INODE_SIZE: " << INODE_SIZE << std::endl;
-	unsigned int byte_offset = (index * INODE_SIZE); // byte correspondiente al inodo dentro de la tabla
-	unsigned int block_offset = byte_offset / BLOCK_SIZE; // bloque correspondiente al byte
-	// leo todo el bloque correspondiente al inodo, no entiendo lo del puntero
-	unsigned int internal_offset = byte_offset % BLOCK_SIZE; // byte del bloque que corresponde 
-	// 
 
-	unsigned char* block = new unsigned char[BLOCK_SIZE]; // unsigned char* block; antes hacía esto, está mal porque read_block no hace malloc
+	// byte correspondiente al inodo dentro de la tabla
+	unsigned int byte_offset_del_inodo = index * INODE_SIZE;
+
+	// byte del bloque que corresponde 
+	unsigned int internal_offset = byte_offset_del_inodo % BLOCK_SIZE; 
+
+	// bloque correspondiente al byte del inodo
+	unsigned int block_offset = byte_offset_del_inodo / BLOCK_SIZE; 
+	
+	// donde lo vamos a guardar?
+	unsigned char* block = new unsigned char[BLOCK_SIZE]; 
+
 	read_block(inode_table_start + block_offset, block);
 	
     Ext2FSInode* inode = new Ext2FSInode;
@@ -303,54 +318,75 @@ struct Ext2FSInode * Ext2FS::load_inode(unsigned int inode_number)
     
     delete[] block;
     
-    return inode;	return inode;
+    return inode;	
 }
 
 unsigned int Ext2FS::get_block_address(struct Ext2FSInode * inode, unsigned int block_number)
 {
-	//TODO: Ejercicio 2 dado un inodo y un número de bloque, quiero saber la dirección
-	// el número de bloque sería el número de bloque dentro del inodo
-	// caso 1: está entre 0 y 11, punteros indirectos
-	// caso 2: está en el primer indirecto
-	// caso 3: en el doble indirecto
-	unsigned int BLOCK_SIZE = 1024 << _superblock->log_block_size;
-	if(block_number < 12){
-		unsigned int block_address = inode->block[block_number];
+	//TODO: Ejercicio 2 dado un inodo y un número de bloque, quiero saber la dirección del bloque
+	// block_number es el número de bloque dentro del inodo
+
+	// caso 1: está entre 0 y 11, punteros directos
+	// caso 2: está en el simple indirecto
+	// caso 3: está en el doble indirecto
+	// caso 3: en el triple indirecto
+
+	unsigned int BLOCK_SIZE = 1024; //por consigna
+
+	// caso 1: Punteros directos
+	if( block_number < 12){
+		unsigned int block_address = inode -> block[block_number];
 		return block_address;
 	}
+
 	// BLOCK_SIZE = 1024, LBA_SIZE = sizeof(unsigned int) 4 bytes
 	// en el primer indirecto entonces voy a tener 1024/4 = 256 LBAs, 12 a 267?
 	else if (block_number >= 12 && block_number < 268){
-		unsigned int lba_f_indirect = inode->block[12]; // LBA del primer indirecto
-		// lo tengo que traer de memoria chavales
-		unsigned char* f_indirect = new unsigned char[BLOCK_SIZE]; // reservo memoria para traer el bloque
+		
+		// LBA del primer indirecto
+		unsigned int lba_f_indirect = inode -> block[12];
+		
+		// lo traemos de memoria
+		// reservamos memoria para traer el bloque
+		unsigned char* f_indirect = new unsigned char[BLOCK_SIZE]; 
+
 		// son 1024 elementos de 1 byte
 		// pero cada LBA ocupa 4 bytes tonces tengo q mirar al array ese como 256 elementos unsigned int
 		read_block(lba_f_indirect, f_indirect);
+
 		unsigned int f_indirect_block_index = block_number - 12;
 		unsigned int* f_indirect_to_lba = (unsigned int*)f_indirect;
 		unsigned int block_address = f_indirect_to_lba[f_indirect_block_index];
+		
 		return block_address;
 	}
-	else{ // block_number >= 268, segundo indirecto
-		unsigned int lba_s_indirect = inode->block[13]; // lba del segundo indirecto
+	else{ 
+		// block_number >= 268, segundo indirecto
+		unsigned int lba_s_indirect = inode -> block[13]; // lba del segundo indirecto
+
 		// lo traigo a memoria
 		unsigned char* s_indirect = new unsigned char[BLOCK_SIZE]; 
 		read_block(lba_s_indirect, s_indirect);
+
 		unsigned int* s_indirect_to_lba = (unsigned int*)s_indirect; // para verlo como aray de uints de 4b, 256 elems, son todos lba a f_indirects
+		
 		// ahora a q primer indirecto dentro del segundo indirecto le corresponde
 		unsigned int s_indirect_block_index = block_number - 268;
-		// cada primer indirecto tiene 256 bloke
-		// tonce el primer indirecto correspondiente al indice va a a ser:
+		
+		// cada primer indirecto tiene 256 bloques
+		// entonces el primer indirecto correspondiente al indice va a a ser:
 		unsigned int containing_f_indirect_index = s_indirect_block_index / 256;
 		unsigned int containing_f_indirect_lba = s_indirect_to_lba[containing_f_indirect_index];
+
 		//lo traigo a memoria
 		unsigned char* containing_f_indirect = new unsigned char[BLOCK_SIZE];  
 		read_block(containing_f_indirect_lba, containing_f_indirect);
-		unsigned int* containing_f_indirect_to_lba = (unsigned int*)containing_f_indirect; // Me quedo sin nombres perdon
-		//OK AHORA TENGO EL PRIMER INDIRECTO Q CORRESPONDE COMO ACCEDO AL Q QUIERO
-		unsigned int f_indirect_index = s_indirect_block_index % 256; // creo q funcinoa pq es parecido al ej anterior
+		
+
+		unsigned int* containing_f_indirect_to_lba = (unsigned int*)containing_f_indirect; 
+		unsigned int f_indirect_index = s_indirect_block_index % 256;
 		unsigned int block_address = containing_f_indirect_to_lba[f_indirect_index];
+
 		return block_address;
 	}
 }
@@ -370,38 +406,49 @@ struct Ext2FSInode * Ext2FS::get_file_inode_from_dir_inode(struct Ext2FSInode * 
         from = load_inode(EXT2_RDIR_INODE_NUMBER);
     assert(INODE_ISDIR(from));
 
-    int block_size = 1024 << _superblock->log_block_size;
-    unsigned char *block_buf = (unsigned char *) malloc(2 * block_size);
-    unsigned char *block_sig = (unsigned char *) block_buf + block_size;
+    int block_size = 1024;
+	//pedimos memoria, el doblre de un bloque (por que?)
+    unsigned char *block_buf = (unsigned char *) malloc(block_size); //bloque 1
+
+	// i quien va a ser?
+	// read quien es?
     int i = 0;
     int read = 0;
     
-    while (i < from->blocks) {
+	// mientras i sea menor a la cantidad de bloques del inodo del directorio
+    while (i < from -> blocks) {
+
+		// dirección del bloque i
         unsigned int address = get_block_address(from, i);
+
+		//leemos el bloque en la memoria que reservamos
         read_block(address, block_buf);
-        
-        if (i + 1 < from->blocks) {
-            unsigned int address_2 = get_block_address(from, i+1);
-            read_block(address_2, block_sig);
-        }
-        
+
+		//mientras read sea menor al tamaño del bloque
         while (read < block_size) {
-            Ext2FSDirEntry *entradaActual = (Ext2FSDirEntry*) (block_buf + read);
+
+			// puntero a bloque de directorio
+
+            Ext2FSDirEntry *entrada_actual = (Ext2FSDirEntry*) (block_buf + read);
             
-            if (entradaActual->inode == 0 || read + entradaActual->record_length > block_size) {
+			// si no se esta usado el primer 
+			// salimos
+            if (entrada_actual->inode == NULL) {
                 break;
             }
             
-            int lenght = entradaActual->name_length;
-            char* filename2 = entradaActual->name;
-            
-            if(lenght == strlen(filename) && !strncmp(filename, filename2, lenght)){
-                int inodoActual = entradaActual->inode;
+			// traemos el nombre y el largo del archivo en el inodo
+            int lenght = entrada_actual->name_length;
+            char* nombre_archivo = entrada_actual->name;
+
+			// comparamos el nombre del archivo
+            if(lenght == strlen(filename) && strncmp(filename, nombre_archivo, lenght) == 0){
+                int inodo_actual = entrada_actual->inode;
                 free(block_buf);
-                return load_inode(inodoActual);
+                return load_inode(inodo_actual);
             }
             
-            read += entradaActual->record_length;
+            read += entrada_actual->record_length;
         }
         
         i++;
