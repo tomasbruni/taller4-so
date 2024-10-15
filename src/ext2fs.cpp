@@ -441,7 +441,7 @@ struct Ext2FSInode * Ext2FS::get_file_inode_from_dir_inode(struct Ext2FSInode * 
             char* nombre_archivo = entrada_actual->name;
 
 			// comparamos el nombre del archivo
-            if(lenght == strlen(filename) && strncmp(filename, nombre_archivo, lenght) == 0){
+            if(lenght == strlen(filename) && !strncmp(filename, nombre_archivo, lenght) == 0){
                 int inodo_actual = entrada_actual->inode;
                 free(block_buf);
                 return load_inode(inodo_actual);
