@@ -446,6 +446,7 @@ struct Ext2FSInode * Ext2FS::get_file_inode_from_dir_inode(struct Ext2FSInode * 
                 return load_inode(inodo_actual);
             }
             
+			// porque las entradas a directorio no tienen tamaño fijo
             read += entrada_actual->record_length;
         }
         
