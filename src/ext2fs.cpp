@@ -406,10 +406,9 @@ struct Ext2FSInode * Ext2FS::get_file_inode_from_dir_inode(struct Ext2FSInode * 
         from = load_inode(EXT2_RDIR_INODE_NUMBER);
     assert(INODE_ISDIR(from));
 
-    int block_size = 1024;
+    int BLOCK_SIZE = 1024;
 	//pedimos memoria para el bloque
-    unsigned char *block_buf = (unsigned char *) malloc(block_size);
-
+	unsigned char *block_buf = new unsigned char[BLOCK_SIZE];
 	// i y read son contadores
     int i = 0;
     int read = 0;
@@ -417,20 +416,20 @@ struct Ext2FSInode * Ext2FS::get_file_inode_from_dir_inode(struct Ext2FSInode * 
 	// mientras i sea menor a la cantidad de bloques del inodo del directorio
     while (i < from -> blocks) {
 
-		// dirección del bloque i
+		// dirección del bloque i esimo dentro del nodo from
         unsigned int address = get_block_address(from, i);
 
 		//leemos el bloque en la memoria que reservamos
         read_block(address, block_buf);
 
 		//mientras read sea menor al tamaño del bloque
-        while (read < block_size) {
+		// read es la cantidad de bytes que leemos
+        while (read < BLOCK_SIZE) {
 
 			// puntero a bloque de directorio
-
             Ext2FSDirEntry *entrada_actual = (Ext2FSDirEntry*) (block_buf + read);
             
-			// si no se esta usado el primer 
+			// si no se esta usado el primer inodo
 			// salimos
             if (entrada_actual->inode == NULL) {
                 break;
@@ -441,7 +440,7 @@ struct Ext2FSInode * Ext2FS::get_file_inode_from_dir_inode(struct Ext2FSInode * 
             char* nombre_archivo = entrada_actual->name;
 
 			// comparamos el nombre del archivo
-            if(lenght == strlen(filename) && !strncmp(filename, nombre_archivo, lenght) == 0){
+            if(lenght == strlen(filename) && (strncmp(filename, nombre_archivo, lenght) == 0)){
                 int inodo_actual = entrada_actual->inode;
                 free(block_buf);
                 return load_inode(inodo_actual);
