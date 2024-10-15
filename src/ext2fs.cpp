@@ -340,7 +340,7 @@ unsigned int Ext2FS::get_block_address(struct Ext2FSInode * inode, unsigned int 
 	}
 
 	// BLOCK_SIZE = 1024, LBA_SIZE = sizeof(unsigned int) 4 bytes
-	// en el primer indirecto entonces voy a tener 1024/4 = 256 LBAs, 12 a 267?
+	// en el primer indirecto entonces voy a tener 1024/4 = 256 LBAs, 12 a 267(viene de 256+12)
 	else if (block_number >= 12 && block_number < 268){
 		
 		// LBA del primer indirecto
